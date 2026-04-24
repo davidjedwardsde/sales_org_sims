@@ -8,7 +8,7 @@ The data is generated in a CSV format and can be imported into a database or wor
 
 The data is generated for a single sales org with the following entities:
 - Users
-- Customers
+- Accounts
 - Leads
 - Contacts
 - Opportunities
@@ -22,9 +22,10 @@ This script was generated with the help of Codex 5.3.
 
 
 import csv
+import os
 import random
 import string
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import date, datetime, timedelta
 
 
@@ -34,7 +35,7 @@ random.seed(SEED)
 
 COUNTS = {
     "users": 275,
-    "customers": 10000,
+    "accounts": 10000,
     "leads": 14000,
     "contacts": 18500,
     "opportunities": 16000,
@@ -45,12 +46,14 @@ COUNTS = {
 }
 
 
-BASE_DIR = "."
+# Resolve to sample_data/csv so generation works from any working directory
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.normpath(os.path.join(_BASE_DIR, "..", "csv"))
 
 
 ID_PREFIX = {
     "user": "005",
-    "customer": "001",
+    "account": "001",
     "lead": "00Q",
     "contact": "003",
     "opportunity": "006",
@@ -234,15 +237,15 @@ def weighted_owner(frontline_users, user_by_id, distribution):
     return random.choice(buckets[selected_role])
 
 
-def build_customers(frontline_users, user_by_id):
+def build_accounts(frontline_users, user_by_id):
     rows = []
-    for i in range(COUNTS["customers"]):
+    for i in range(COUNTS["accounts"]):
         city, state, country = random.choice(CITIES)
         owner_id = weighted_owner(frontline_users, user_by_id, {"BDR": 30, "SDR": 30, "AE": 40})
         name = f"{random.choice(COMPANY_PREFIX)} {random.choice(COMPANY_SUFFIX)} {i + 1}"
         created = rand_date(date(2021, 1, 1), date(2025, 12, 31))
         rows.append({
-            "id": sf_id(ID_PREFIX["customer"]),
+            "id": sf_id(ID_PREFIX["account"]),
             "name": name,
             "account_number": f"ACC-{100000 + i}",
             "owner_id": owner_id,
@@ -259,10 +262,10 @@ def build_customers(frontline_users, user_by_id):
     return rows
 
 
-def build_leads(frontline_users, user_by_id, customers):
+def build_leads(frontline_users, user_by_id, accounts):
     rows = []
     converted_ids = []
-    customer_ids = [c["id"] for c in customers]
+    account_ids = [a["id"] for a in accounts]
     for i in range(COUNTS["leads"]):
         fn = random.choice(FIRST_NAMES)
         ln = random.choice(LAST_NAMES)
@@ -270,7 +273,7 @@ def build_leads(frontline_users, user_by_id, customers):
         created = rand_date(date(2022, 1, 1), date(2025, 12, 31))
         converted = random.random() < 0.52
         cid = sf_id(ID_PREFIX["lead"])
-        converted_customer_id = random.choice(customer_ids) if converted else ""
+        converted_account_id = random.choice(account_ids) if converted else ""
         rows.append({
             "id": cid,
             "first_name": fn,
@@ -283,7 +286,7 @@ def build_leads(frontline_users, user_by_id, customers):
             "owner_id": owner_id,
             "created_date": str(created),
             "is_converted": "true" if converted else "false",
-            "converted_customer_id": converted_customer_id,
+            "converted_account_id": converted_account_id,
             "converted_contact_id": "",
             "converted_opportunity_id": "",
         })
@@ -292,9 +295,9 @@ def build_leads(frontline_users, user_by_id, customers):
     return rows, set(converted_ids)
 
 
-def build_contacts(frontline_users, user_by_id, customers, leads, converted_lead_ids):
+def build_contacts(frontline_users, user_by_id, accounts, leads, converted_lead_ids):
     rows = []
-    customer_ids = [c["id"] for c in customers]
+    account_ids = [a["id"] for a in accounts]
     leads_by_id = {l["id"]: l for l in leads}
 
     converted_contacts_to_create = int(round(COUNTS["contacts"] * 0.35))
@@ -310,7 +313,7 @@ def build_contacts(frontline_users, user_by_id, customers, leads, converted_lead
         created = rand_date(date(2022, 1, 1), date(2025, 12, 31))
         rows.append({
             "id": cid,
-            "account_id": lead["converted_customer_id"] or random.choice(customer_ids),
+            "account_id": lead["converted_account_id"] or random.choice(account_ids),
             "owner_id": lead["owner_id"],
             "first_name": lead["first_name"],
             "last_name": lead["last_name"],
@@ -331,7 +334,7 @@ def build_contacts(frontline_users, user_by_id, customers, leads, converted_lead
         owner_id = weighted_owner(frontline_users, user_by_id, {"BDR": 30, "SDR": 30, "AE": 40})
         rows.append({
             "id": sf_id(ID_PREFIX["contact"]),
-            "account_id": random.choice(customer_ids),
+            "account_id": random.choice(account_ids),
             "owner_id": owner_id,
             "first_name": fn,
             "last_name": ln,
@@ -347,9 +350,9 @@ def build_contacts(frontline_users, user_by_id, customers, leads, converted_lead
     return rows, lead_to_contact
 
 
-def build_opportunities(frontline_users, user_by_id, customers, leads, converted_lead_ids):
+def build_opportunities(frontline_users, user_by_id, accounts, leads, converted_lead_ids):
     rows = []
-    customer_ids = [c["id"] for c in customers]
+    account_ids = [a["id"] for a in accounts]
     converted_leads = [l for l in leads if l["id"] in converted_lead_ids]
     random.shuffle(converted_leads)
     converted_limit = int(round(COUNTS["opportunities"] * 0.55))
@@ -371,7 +374,7 @@ def build_opportunities(frontline_users, user_by_id, customers, leads, converted
         created = rand_date(date(2022, 1, 1), date(2025, 12, 31))
         close_date = created + timedelta(days=random.randint(15, 180))
 
-        account_id = lead["converted_customer_id"] if lead and lead["converted_customer_id"] else random.choice(customer_ids)
+        account_id = lead["converted_account_id"] if lead and lead["converted_account_id"] else random.choice(account_ids)
         lead_source_id = lead["id"] if lead else ""
         if lead:
             lead_to_opp[lead["id"]] = opp_id
@@ -448,9 +451,9 @@ def build_order_items(orders):
     return rows
 
 
-def build_tasks(frontline_users, user_by_id, customers, contacts, opportunities, leads):
+def build_tasks(frontline_users, user_by_id, accounts, contacts, opportunities, leads):
     rows = []
-    customer_ids = [c["id"] for c in customers]
+    account_ids = [a["id"] for a in accounts]
     contact_ids = [c["id"] for c in contacts]
     opp_ids = [o["id"] for o in opportunities]
     lead_ids = [l["id"] for l in leads]
@@ -458,7 +461,7 @@ def build_tasks(frontline_users, user_by_id, customers, contacts, opportunities,
     for i in range(COUNTS["tasks"]):
         owner_id = weighted_owner(frontline_users, user_by_id, {"BDR": 40, "SDR": 40, "AE": 20})
         who_type = random.choices(["lead", "contact"], weights=[45, 55], k=1)[0]
-        what_type = random.choices(["customer", "opportunity", "none"], weights=[45, 45, 10], k=1)[0]
+        what_type = random.choices(["account", "opportunity", "none"], weights=[45, 45, 10], k=1)[0]
         due = rand_date(date(2022, 1, 1), date(2026, 1, 31))
         rows.append({
             "id": sf_id(ID_PREFIX["task"]),
@@ -468,7 +471,7 @@ def build_tasks(frontline_users, user_by_id, customers, contacts, opportunities,
             "priority": random.choice(["High", "Normal", "Low"]),
             "owner_id": owner_id,
             "who_id": random.choice(lead_ids if who_type == "lead" else contact_ids),
-            "what_id": "" if what_type == "none" else random.choice(customer_ids if what_type == "customer" else opp_ids),
+            "what_id": "" if what_type == "none" else random.choice(account_ids if what_type == "account" else opp_ids),
             "activity_date": str(due),
             "is_closed": random.choice(["true", "false"]),
             "created_date": str(due - timedelta(days=random.randint(1, 30))),
@@ -476,16 +479,16 @@ def build_tasks(frontline_users, user_by_id, customers, contacts, opportunities,
     return rows
 
 
-def build_events(frontline_users, user_by_id, customers, contacts, opportunities):
+def build_events(frontline_users, user_by_id, accounts, contacts, opportunities):
     rows = []
-    customer_ids = [c["id"] for c in customers]
+    account_ids = [a["id"] for a in accounts]
     contact_ids = [c["id"] for c in contacts]
     opp_ids = [o["id"] for o in opportunities]
 
     for i in range(COUNTS["events"]):
         owner_id = weighted_owner(frontline_users, user_by_id, {"BDR": 20, "SDR": 35, "AE": 45})
         who_id = random.choice(contact_ids)
-        what_type = random.choices(["customer", "opportunity"], weights=[40, 60], k=1)[0]
+        what_type = random.choices(["account", "opportunity"], weights=[40, 60], k=1)[0]
         start_date = rand_date(date(2022, 1, 1), date(2026, 1, 31))
         start_dt = datetime.combine(start_date, datetime.min.time()) + timedelta(hours=random.randint(8, 16))
         duration = random.choice([30, 45, 60, 90])
@@ -496,7 +499,7 @@ def build_events(frontline_users, user_by_id, customers, contacts, opportunities
             "type": random.choice(EVENT_TYPES),
             "owner_id": owner_id,
             "who_id": who_id,
-            "what_id": random.choice(customer_ids if what_type == "customer" else opp_ids),
+            "what_id": random.choice(account_ids if what_type == "account" else opp_ids),
             "location": random.choice(["Zoom", "Teams", "Onsite", "Phone"]),
             "start_datetime": start_dt.isoformat(),
             "end_datetime": end_dt.isoformat(),
@@ -515,34 +518,34 @@ def update_lead_conversions(leads, lead_to_contact, lead_to_opp):
             lead["converted_opportunity_id"] = lead_to_opp.get(lid, "")
 
 
-def validate(users, customers, leads, contacts, opportunities, orders, order_items, tasks, events):
+def validate(users, accounts, leads, contacts, opportunities, orders, order_items, tasks, events):
     users_set = {r["id"] for r in users}
-    customer_set = {r["id"] for r in customers}
+    account_set = {r["id"] for r in accounts}
     lead_set = {r["id"] for r in leads}
     contact_set = {r["id"] for r in contacts}
     opp_set = {r["id"] for r in opportunities}
     order_set = {r["id"] for r in orders}
 
-    for row in customers:
+    for row in accounts:
         assert row["owner_id"] in users_set
     for row in leads:
         assert row["owner_id"] in users_set
-        if row["converted_customer_id"]:
-            assert row["converted_customer_id"] in customer_set
+        if row["converted_account_id"]:
+            assert row["converted_account_id"] in account_set
         if row["converted_contact_id"]:
             assert row["converted_contact_id"] in contact_set
         if row["converted_opportunity_id"]:
             assert row["converted_opportunity_id"] in opp_set
     for row in contacts:
         assert row["owner_id"] in users_set
-        assert row["account_id"] in customer_set
+        assert row["account_id"] in account_set
     for row in opportunities:
         assert row["owner_id"] in users_set
-        assert row["account_id"] in customer_set
+        assert row["account_id"] in account_set
         if row["lead_source_id"]:
             assert row["lead_source_id"] in lead_set
     for row in orders:
-        assert row["account_id"] in customer_set
+        assert row["account_id"] in account_set
         assert row["opportunity_id"] in opp_set
         assert row["owner_id"] in users_set
     for row in order_items:
@@ -551,11 +554,11 @@ def validate(users, customers, leads, contacts, opportunities, orders, order_ite
         assert row["owner_id"] in users_set
         assert (row["who_id"] in lead_set) or (row["who_id"] in contact_set)
         if row["what_id"]:
-            assert (row["what_id"] in customer_set) or (row["what_id"] in opp_set)
+            assert (row["what_id"] in account_set) or (row["what_id"] in opp_set)
     for row in events:
         assert row["owner_id"] in users_set
         assert row["who_id"] in contact_set
-        assert (row["what_id"] in customer_set) or (row["what_id"] in opp_set)
+        assert (row["what_id"] in account_set) or (row["what_id"] in opp_set)
 
     jami = [u for u in users if u["name"] == "Jami Green" and u["role"] == "Director"]
     assert len(jami) == 1
@@ -573,16 +576,16 @@ def validate(users, customers, leads, contacts, opportunities, orders, order_ite
     assert abs((roles["SDR"] / frontline_total) - 0.30) <= 0.02
     assert abs((roles["AE"] / frontline_total) - 0.40) <= 0.02
 
-    customer_owner_roles = Counter()
+    account_owner_roles = Counter()
     user_lookup = {u["id"]: u for u in users}
-    for c in customers:
-        role = user_lookup[c["owner_id"]]["role"]
+    for a in accounts:
+        role = user_lookup[a["owner_id"]]["role"]
         if role in {"BDR", "SDR", "AE"}:
-            customer_owner_roles[role] += 1
-    cust_total = sum(customer_owner_roles.values())
-    assert abs((customer_owner_roles["BDR"] / cust_total) - 0.30) <= 0.03
-    assert abs((customer_owner_roles["SDR"] / cust_total) - 0.30) <= 0.03
-    assert abs((customer_owner_roles["AE"] / cust_total) - 0.40) <= 0.03
+            account_owner_roles[role] += 1
+    account_total = sum(account_owner_roles.values())
+    assert abs((account_owner_roles["BDR"] / account_total) - 0.30) <= 0.03
+    assert abs((account_owner_roles["SDR"] / account_total) - 0.30) <= 0.03
+    assert abs((account_owner_roles["AE"] / account_total) - 0.40) <= 0.03
 
     closed_won = [o for o in opportunities if o["stage_name"] == "Closed Won"]
     cw_roles = Counter(user_lookup[o["owner_id"]]["role"] for o in closed_won)
@@ -594,17 +597,17 @@ def validate(users, customers, leads, contacts, opportunities, orders, order_ite
 def main():
     users, _, _, frontline = build_users()
     user_by_id = {u["id"]: u for u in users}
-    customers = build_customers(frontline, user_by_id)
-    leads, converted_lead_ids = build_leads(frontline, user_by_id, customers)
-    contacts, lead_to_contact = build_contacts(frontline, user_by_id, customers, leads, converted_lead_ids)
-    opportunities, lead_to_opp = build_opportunities(frontline, user_by_id, customers, leads, converted_lead_ids)
+    accounts = build_accounts(frontline, user_by_id)
+    leads, converted_lead_ids = build_leads(frontline, user_by_id, accounts)
+    contacts, lead_to_contact = build_contacts(frontline, user_by_id, accounts, leads, converted_lead_ids)
+    opportunities, lead_to_opp = build_opportunities(frontline, user_by_id, accounts, leads, converted_lead_ids)
     update_lead_conversions(leads, lead_to_contact, lead_to_opp)
     orders = build_orders(opportunities)
     order_items = build_order_items(orders)
-    tasks = build_tasks(frontline, user_by_id, customers, contacts, opportunities, leads)
-    events = build_events(frontline, user_by_id, customers, contacts, opportunities)
+    tasks = build_tasks(frontline, user_by_id, accounts, contacts, opportunities, leads)
+    events = build_events(frontline, user_by_id, accounts, contacts, opportunities)
 
-    validate(users, customers, leads, contacts, opportunities, orders, order_items, tasks, events)
+    validate(users, accounts, leads, contacts, opportunities, orders, order_items, tasks, events)
 
     write_csv(
         "user.csv",
@@ -615,8 +618,8 @@ def main():
         ],
     )
     write_csv(
-        "customer.csv",
-        customers,
+        "account.csv",
+        accounts,
         [
             "id", "name", "account_number", "owner_id", "type", "industry",
             "annual_revenue", "employee_count", "billing_city", "billing_state",
@@ -629,7 +632,7 @@ def main():
         [
             "id", "first_name", "last_name", "company", "email", "phone", "status",
             "lead_source", "owner_id", "created_date", "is_converted",
-            "converted_customer_id", "converted_contact_id", "converted_opportunity_id",
+            "converted_account_id", "converted_contact_id", "converted_opportunity_id",
         ],
     )
     write_csv(
@@ -683,7 +686,7 @@ def main():
 
     counts = {
         "user.csv": len(users),
-        "customer.csv": len(customers),
+        "account.csv": len(accounts),
         "lead.csv": len(leads),
         "contact.csv": len(contacts),
         "opportunity.csv": len(opportunities),
