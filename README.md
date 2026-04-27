@@ -47,6 +47,37 @@ All files are in `sample_data/csv`.
 - `event.who_id` -> `contact.id`
 - `event.what_id` -> `account.id` or `opportunity.id`
 
+## Entity relationship diagram
+
+```mermaid
+erDiagram
+  direction TB
+  User ||--o{ User : "manager_id"
+  User ||--o{ Account : "owner_id"
+  User ||--o{ Lead : "owner_id"
+  User ||--o{ Contact : "owner_id"
+  User ||--o{ Opportunity : "owner_id"
+  User ||--o{ Order : "owner_id"
+  User ||--o{ Task : "owner_id"
+  User ||--o{ Event : "owner_id"
+  Account ||--o{ Contact : "account_id"
+  Account ||--o{ Opportunity : "account_id"
+  Account ||--o{ Order : "account_id"
+  Account ||--o{ Lead : "converted_account_id"
+  Lead ||--o{ Opportunity : "lead_source_id"
+  Opportunity ||--o{ Order : "opportunity_id"
+  Order ||--o{ OrderItem : "order_id"
+  Lead ||--o{ Task : "who_id"
+  Contact ||--o{ Task : "who_id"
+  Account ||--o{ Task : "what_id"
+  Opportunity ||--o{ Task : "what_id"
+  Contact ||--o{ Event : "who_id"
+  Account ||--o{ Event : "what_id"
+  Opportunity ||--o{ Event : "what_id"
+```
+
+`Lead` also has optional `converted_contact_id` and `converted_opportunity_id` to **Contact** and **Opportunity** when a lead is converted. `Task.who_id` is a **Lead** or **Contact**; `Task.what_id` is an **Account**, **Opportunity**, or empty. `Event.who_id` is always a **Contact**; `Event.what_id` is an **Account** or **Opportunity**.
+
 ## Suggested Kaggle Use Cases
 
 - Lead-to-opportunity-to-order conversion funnel analysis
